@@ -17,12 +17,13 @@ class ImageLabel(QLabel):
         self.brushRect = QRect()
         self.offset = QPoint()
         self.zoomFactor = 1
+        self.pan = False
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.drawing = True
             self.lastPoint = event.pos()
-        elif event.button() == Qt.RightButton:
+        elif (event.button() == Qt.RightButton) and (QApplication.keyboardModifiers() == Qt.ControlModifier):
             self.pan = True
             self.panStart = event.pos()
 
@@ -46,8 +47,8 @@ class ImageLabel(QLabel):
             
 
     def mouseReleaseEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self.drawing = False
+        self.drawing = False
+        self.pan = True
 
     def setPixmap(self, pixmap):
         super().setPixmap(pixmap)
@@ -71,21 +72,29 @@ class ImageLabel(QLabel):
         self.overlayVisible = visible
         self.update()
         
-        
+
+            
+            
     def wheelEvent(self, event):
         if QApplication.keyboardModifiers() == Qt.ControlModifier:
             degrees = event.angleDelta().y() / 8
             steps = degrees / 15
             zoom_factor = 1 + steps / 10
-            
+    
+            zoom_factor_old = self.zoomFactor
+            mouse_position = event.pos()
+    
+            # Get the mouse position relative to the original (unzoomed) image
+            mouse_position_in_orig = (mouse_position - self.offset) / zoom_factor_old
+    
+            # Update the zoom factor
             self.zoomFactor = self.zoomFactor * zoom_factor
-            
-            center = event.pos()
-            actual_size = self.pixmap().size() 
-            self.offset = QPointF(center) - (QPointF(actual_size.width(), actual_size.height()) / self.zoomFactor) / 2
-            self.offset = - self.offset.toPoint()
-            
+    
+            # Calculate the new offset based on the change in zoom factor and the mouse position
+            self.offset = mouse_position - mouse_position_in_orig * self.zoomFactor
+    
             self.update()
+            
 
 class Ui(QMainWindow):
     def __init__(self):

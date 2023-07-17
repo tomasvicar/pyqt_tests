@@ -45,6 +45,17 @@
     <property name="frameShadow">
      <enum>QFrame::Raised</enum>
     </property>
+    <widget class="QWidget" name="horizontalLayoutWidget">
+     <property name="geometry">
+      <rect>
+       <x>0</x>
+       <y>0</y>
+       <width>1111</width>
+       <height>761</height>
+      </rect>
+     </property>
+     <layout class="QHBoxLayout" name="horizontalLayout_figure"/>
+    </widget>
    </widget>
    <widget class="QPushButton" name="pushButton_load_img">
     <property name="geometry">
@@ -83,6 +94,9 @@
     </property>
     <property name="text">
      <string>show lines</string>
+    </property>
+    <property name="checked">
+     <bool>true</bool>
     </property>
    </widget>
   </widget>

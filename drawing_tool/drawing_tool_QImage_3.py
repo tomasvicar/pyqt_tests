@@ -8,7 +8,7 @@ class ImageLabel(QLabel):
     def __init__(self, parent=None, ui=None):
         super(ImageLabel, self).__init__(parent)
         self.setMouseTracking(True)
-        self.drawing = False
+        self.drawing = True
         self.brushColor = Qt.black
         self.lastPoint = QPoint()
         self.overlay = QImage()
