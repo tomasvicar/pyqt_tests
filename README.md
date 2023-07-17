@@ -1,11 +1,11 @@
 # Examples of simple pyqt windows 
 
-first_window - example of simple window with button
+*first_window* - example of simple window with button
 
-plt_test - plot/image with matplolib
+*plt_test* - plot/image with matplolib
 
-mouse_interactions - example of mouse click response of matplotlib plot
+*mouse_interactions* - example of mouse click response of matplotlib plot
 
-drawing_tool - drawing tool with pyqt functions (much faster response than matplotlib); drawing_tool_QImage_simple (simple version), drawing_tool_QImage_3 (version with brush size circle)
+*drawing_tool* - drawing tool with pyqt functions (much faster response than matplotlib); drawing_tool_QImage_simple (simple version), drawing_tool_QImage_3 (version with brush size circle)
 
-simple_zoom - drawing tool with additional zooming
+*simple_zoom* - drawing tool with additional zooming
