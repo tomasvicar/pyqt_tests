@@ -10,7 +10,7 @@ class ImageLabel(QLabel):
         self.setMouseTracking(True)
         self.drawing = False
         self.brushColor = Qt.black
-        self.lastPoint = QPoint()
+        self.last_mouse_position_in_orig = QPoint()
         self.overlay = QImage()
         self.overlayVisible = True
         self.spinBox_brush_size = ui.findChild(QtWidgets.QSpinBox, 'spinBox_brush_size')
@@ -21,33 +21,36 @@ class ImageLabel(QLabel):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
+            mouse_position = event.pos()
+            mouse_position_in_orig = (mouse_position - self.offset) / self.zoomFactor
             self.drawing = True
-            self.lastPoint = event.pos()
+            self.last_mouse_position_in_orig = mouse_position_in_orig
         elif (event.button() == Qt.RightButton) and (QApplication.keyboardModifiers() == Qt.ControlModifier):
             self.pan = True
             self.panStart = event.pos()
 
 
     def mouseMoveEvent(self, event):
+        mouse_position = event.pos()
+        mouse_position_in_orig = (mouse_position - self.offset) / self.zoomFactor
         if (event.buttons() & Qt.LeftButton) and self.drawing:
-            
             
             painter = QPainter(self.overlay)
             painter.setPen(QPen(self.brushColor, self.spinBox_brush_size.value(), Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-            painter.drawLine((self.lastPoint - self.offset) / self.zoomFactor  , (event.pos() - self.offset)  / self.zoomFactor )
+            painter.drawLine(self.last_mouse_position_in_orig , mouse_position_in_orig)
             
-            self.lastPoint = event.pos()
+            self.last_mouse_position_in_orig = mouse_position_in_orig
             self.update()
         elif (event.buttons() & Qt.RightButton) and self.pan:
             pos = event.pos() 
             self.offset += event.pos() - self.panStart
             self.panStart = pos
             self.update()
-        # else:
-        #     self.brushRect = QRect(int((event.pos().x() / self.zoomFactor - self.spinBox_brush_size.value() / 2) ),
-        #                            int((event.pos().y() / self.zoomFactor) - self.spinBox_brush_size.value() / 2) ,
-        #                            self.spinBox_brush_size.value(), self.spinBox_brush_size.value())
-        #     self.update()
+        else:
+            self.brushRect = QRect(mouse_position_in_orig.x() - self.spinBox_brush_size.value() // 2,
+                                    mouse_position_in_orig.y() - self.spinBox_brush_size.value() // 2,
+                                    self.spinBox_brush_size.value(), self.spinBox_brush_size.value())
+            self.update()
 
             
 
@@ -72,9 +75,9 @@ class ImageLabel(QLabel):
         if self.overlayVisible:
             painter.drawImage(0, 0, self.overlay)
             
-        # if (not self.drawing) and (not self.pan):
-        #     painter.setPen(QPen(Qt.red, 2))  # Red, dotted line
-        #     painter.drawEllipse(self.brushRect)
+        if (not self.drawing) and (not self.pan):
+            painter.setPen(QPen(Qt.red, 2))  # Red, dotted line
+            painter.drawEllipse(self.brushRect)
 
     
     def setOverlayVisible(self, visible):
