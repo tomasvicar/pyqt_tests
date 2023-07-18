@@ -31,6 +31,9 @@ class ImageViewer(QGraphicsView):
         
 
     def wheelEvent(self, event):
+        
+        
+        
         if event.angleDelta().y() > 0:
             factor = 1.25
             self._zoom += 1
@@ -44,12 +47,17 @@ class ImageViewer(QGraphicsView):
             self.fitInView(self._scene.sceneRect(), Qt.KeepAspectRatio)
         else:
             self.scale(factor, factor)
+            
+            
+            
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self._pan = True
             self._panStartX = event.x()
             self._panStartY = event.y()
+            
+
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
