@@ -25,15 +25,11 @@ class ImageViewer(QGraphicsView):
         self.fitInView(self._scene.sceneRect(), Qt.KeepAspectRatio)
 
     def wheelEvent(self, event):
-        # Get the position of the mouse in the view coordinates before zooming
+
         mouse_pos_before_zoom = event.pos()
         
-        # mouse_pos_before_zoom = self.mapFromScene(mouse_pos_before_zoom)
         mouse_pos_before_zoom_global = self.mapToScene(mouse_pos_before_zoom)
-        
-        # tmp = mouse_pos_before_zoom
-        # tmp = self.mapToScene(mouse_pos_before_zoom)
-        # tmp = self.mapFromScene(mouse_pos_before_zoom)
+  
     
         if event.angleDelta().y() > 0:
             factor = 1.25
@@ -49,42 +45,17 @@ class ImageViewer(QGraphicsView):
         else:
             self.scale(factor, factor)
     
-        # mouse_pos_after_zoom = event.pos()
-        
-        
     
-        # Calculate the new position of the mouse in the view coordinates after zooming
         mouse_pos_after_zoom = self.mapFromScene(mouse_pos_before_zoom_global)
-        # mouse_pos_after_zoom = self.mapToScene(tmp)
-        
-        # mouse_pos_after_zoom = self.mapToScene(tmp)
-        
-        print(mouse_pos_before_zoom, mouse_pos_before_zoom_global,  mouse_pos_after_zoom)
-    
-        # Calculate the difference between the mouse positions before and after zooming
-        # diff = mouse_pos_after_zoom - mouse_pos_before_zoom
-    
-        # Adjust the translation of the image to keep the mouse at the same position in the view
-        # self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - diff.x())
-        # self.verticalScrollBar().setValue(self.verticalScrollBar().value() - diff.y())
-        
-        
-        
-        # diff = (mouse_pos_after_zoom - mouse_pos_before_zoom) * factor
-        # diff = (mouse_pos_after_zoom - mouse_pos_before_zoom) / factor
+
         diff = (mouse_pos_after_zoom - mouse_pos_before_zoom)
         
         diff = -1 * diff
 
-        # Adjust the translation of the scene by the difference considering the zoom factor
-        # self.translate(diff.x() / factor, diff.y() / factor)
-        
-        # self.translate(diff.x(), diff.y() )
         
         self.horizontalScrollBar().setValue(int(self.horizontalScrollBar().value() - diff.x()))
         self.verticalScrollBar().setValue(int(self.verticalScrollBar().value() - diff.y()))
         
-        # self.centerOn(mouse_pos_after_zoom)
 
 
     def mousePressEvent(self, event):
@@ -110,11 +81,6 @@ class ImageViewer(QGraphicsView):
 
     def resize(self, event):
         self.fitInView(self._scene.sceneRect(), Qt.KeepAspectRatio)
-
-    def setCursorPosition(self, pos):
-        # Set the cursor position to the specified position
-        global_pos = self.mapToGlobal(pos)
-        QCursor.setPos(global_pos)
 
 
 class MainWindow(QMainWindow):
