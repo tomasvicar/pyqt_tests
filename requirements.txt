@@ -2,3 +2,4 @@ spyder
 pyqt5-tools
 matplotlib
 scikit-image
+qimage2ndarray
