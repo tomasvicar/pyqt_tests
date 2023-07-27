@@ -13,6 +13,7 @@ class AdvancedSettingsWindow(QDialog):
         self.spinBox_transparency = self.findChild(QSpinBox,"spinBox_transparency")
 
         self.spinBox_transparency.valueChanged.connect(self.spinBox_transparency_value_changed)
+         
         
     def setViewer(self, viewer):
         self.viewer = viewer

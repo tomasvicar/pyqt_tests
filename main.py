@@ -1,13 +1,16 @@
-from PyQt5.QtWidgets import QApplication, QGraphicsView, QGraphicsScene, QMainWindow, QVBoxLayout, QSizePolicy, QGraphicsPixmapItem, QSpinBox, QCheckBox
+from PyQt5.QtWidgets import QApplication, QGraphicsView, QGraphicsScene, QMainWindow
+from PyQt5.QtWidgets import QVBoxLayout, QSizePolicy, QGraphicsPixmapItem, QSpinBox, QCheckBox
+from PyQt5.QtWidgets import  QRadioButton, QGroupBox
 from PyQt5.QtCore import Qt, QPointF, QSize, QRectF, QLineF, QPoint, QRect
 from PyQt5.QtGui import QPixmap, QPainter, QImage, QColor, QCursor, QPen, QMouseEvent
 from PyQt5 import QtWidgets, uic
 from AdvancedSettingsWindow import AdvancedSettingsWindow
-
-
+import numpy as np
 
 from utils import set_pixmap_transparency
+import utils
 
+COLORS = utils.getColors()
 
 
 class ImageViewerDrawing(QGraphicsView):
@@ -20,17 +23,19 @@ class ImageViewerDrawing(QGraphicsView):
         self._mouse_position_old = QPointF()
         self._draw = False
         self.ellipse = None
+        self._drawline = False
+        self._drawline_clicked = False
         
         self.checkBox_drawing_visible = parent.findChild(QCheckBox,"checkBox_drawing_visible")
         
-        
-        self._color_triplet = (0, 0, 255)
-        self._color = QColor(*self._color_triplet, 255)
         self._brush_size = 1
+        self._color_auto = True
+        self._color_triplet = None
 
         self.setRenderHint(QPainter.Antialiasing)
         self.setRenderHint(QPainter.SmoothPixmapTransform)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        
         
         self.setMouseTracking(True)
 
@@ -42,6 +47,14 @@ class ImageViewerDrawing(QGraphicsView):
     def getOverlay(self):
         return self.overlay
     
+    def setColorIndex(self, index_str):
+        if index_str != 'auto':
+            self._color_triplet = COLORS[int(index_str)]
+            self._color_auto = False
+        else:
+            self._color_triplet = index_str
+            self._color_auto = True
+    
 
 
     def setImage(self, pixmap):
@@ -52,6 +65,8 @@ class ImageViewerDrawing(QGraphicsView):
         self.setScene(self._scene)
         self.fitInView(self._scene.sceneRect(), Qt.KeepAspectRatio)
         
+        
+        # self.overlay = QPixmap.fromImage(QImage(self._pixmap.size(), QImage.Format_ARGB32))
         self.overlay = QPixmap(self._pixmap.size())
         self.overlay.fill(Qt.transparent)
         self._photo_overlay = self._scene.addPixmap(self.overlay)
@@ -93,7 +108,6 @@ class ImageViewerDrawing(QGraphicsView):
         
     
     def update_brush_size(self, event):
-        self._color = QColor(*self._color_triplet, 255 - int(self.advanced_settings_window.spinBox_transparency.value() / 100 * 255))
         if event.modifiers() == Qt.ShiftModifier:
             self._brush_size = self.advanced_settings_window.spinBox_brush_size_shift.value()
         elif event.modifiers() == Qt.ControlModifier:
@@ -102,17 +116,33 @@ class ImageViewerDrawing(QGraphicsView):
             self._brush_size = self.advanced_settings_window.spinBox_brush_size.value()
         
 
-
+    def updateColor(self): 
+        if isinstance(self._color_triplet, QColor):
+            self._color = self._color_triplet
+        else:
+            self._color = QColor(*self._color_triplet, 255 - int(self.advanced_settings_window.spinBox_transparency.value() / 100 * 255))
+        
+        
 
     def mousePressEvent(self, event):
         if event.button() == Qt.RightButton:
             self._pan = True
             self._panStart = event.pos()
         elif event.button() == Qt.LeftButton:
-            self.update_brush_size(event)
-            self._mouse_position_old =  self.mapToScene(event.pos())
-            self._draw = True
-            self.drawLine(event)
+            if not self._drawline:
+                self.update_brush_size(event)
+                self._mouse_position_old =  self.mapToScene(event.pos())
+                self._draw = True
+                if self._color_auto:
+                    self._color_triplet = utils.get_pixel_color(self.overlay, int(self._mouse_position_old.x()), int(self._mouse_position_old.y()))
+                self.drawLine(event)
+            else:
+                self._drawline_clicked = True
+                self.whole_line_pos= []
+                self.whole_line_parts = []
+                self._mouse_position_old =  self.mapToScene(event.pos())
+                self.whole_line_pos.append(self._mouse_position_old)
+                self.drawLineButtons(event)
             
             
     def mouseReleaseEvent(self, event):
@@ -120,6 +150,24 @@ class ImageViewerDrawing(QGraphicsView):
             self._pan = False
         elif event.button() == Qt.LeftButton:
             self._draw = False
+            if self._drawline:
+                self._drawline = False
+                self._drawline_clicked = False
+                QApplication.restoreOverrideCursor()
+                for part in self.whole_line_parts:
+                    self._scene.removeItem(part)
+                if self._buttonType == 'split':
+                    self.splitCell()
+                elif self._buttonType == 'join':
+                    self.joinCell()  
+                elif self._buttonType == 'remove':
+                    self.removeCell()  
+                elif self._buttonType == 'new':
+                    self.newCell()  
+                elif self._buttonType == 'fill':
+                    self.fillCell()  
+                        
+                        
             
             
     def updateOverlay(self):
@@ -131,6 +179,7 @@ class ImageViewerDrawing(QGraphicsView):
             self._photo_overlay.setPixmap(tmp)
             
     def drawLine(self, event):
+        self.updateColor()
         mouse_position = self.mapToScene(event.pos()) + QPointF(0.1, 0.1)
         painter = QPainter(self.overlay)
         painter.setPen(QPen(self._color, self._brush_size, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
@@ -140,10 +189,15 @@ class ImageViewerDrawing(QGraphicsView):
         self._mouse_position_old = mouse_position
         self.updateOverlay()
         
+    def drawLineButtons(self, event):
+        mouse_position = self.mapToScene(event.pos()) + QPointF(0.1, 0.1)
+        self.whole_line_pos.append(mouse_position)
+        line_part = self._scene.addLine(QLineF(self._mouse_position_old, mouse_position), QPen(QColor("blue"), 2))
+        self.whole_line_parts.append(line_part)
+        self._mouse_position_old = mouse_position
             
             
     def mouseMoveEvent(self, event):
-        self.update_brush_size(event)
         if self.ellipse is not None:
             self._scene.removeItem(self.ellipse)
         
@@ -155,6 +209,12 @@ class ImageViewerDrawing(QGraphicsView):
         elif self._draw:
             self.update_brush_size(event)
             self.drawLine(event)
+            
+        elif self._drawline_clicked:
+            self.drawLineButtons(event)
+            
+        elif self._drawline:
+            pass
             
         else:
             self.update_brush_size(event)
@@ -181,6 +241,29 @@ class ImageViewerDrawing(QGraphicsView):
     def update_trasparency(self):
         self.overlay = set_pixmap_transparency(self.overlay, 255 - int(self.advanced_settings_window.spinBox_transparency.value() / 100 * 255))
         self._photo_overlay.setPixmap(self.overlay)
+        
+    def setDrawLineButtons(self, buttonType):
+        self._drawline = True
+        QApplication.setOverrideCursor(Qt.CrossCursor)
+        self._buttonType = buttonType
+        
+        
+    def splitCell(self):
+        birnary_line = utils.toBinaryLine(self.whole_line_pos, self._pixmap.size())
+        self.overlay = utils.splitCell(self.overlay, birnary_line)
+        self.updateOverlay()
+    
+    def joinCell(self):
+        pass
+    
+    def removeCell(self):
+        pass
+    
+    def newCell(self):
+        pass
+    
+    def fillCell(self):
+        pass
 
 
 
@@ -205,17 +288,70 @@ class MainWindow(QMainWindow):
         
         self.checkBox_drawing_visible = self.findChild(QCheckBox,"checkBox_drawing_visible")
         self.checkBox_drawing_visible.stateChanged.connect(self.viewer.updateOverlay)
-
+        
+        
+        
+        self.pushButton_split = self.findChild(QtWidgets.QPushButton,"pushButton_split")
+        self.pushButton_split.clicked.connect(self.pushButton_split_clicked)
+        
+        self.pushButton_join = self.findChild(QtWidgets.QPushButton,"pushButton_join")
+        self.pushButton_join.clicked.connect(self.pushButton_join_clicked)
+        
+        
+        self.pushButton_remove = self.findChild(QtWidgets.QPushButton,"pushButton_remove")
+        self.pushButton_remove.clicked.connect(self.pushButton_remove_clicked)
+        
+        
+        self.pushButton_new_cell = self.findChild(QtWidgets.QPushButton,"pushButton_new_cell")
+        self.pushButton_new_cell.clicked.connect(self.pushButton_new_cell_clicked)
+        
+        self.pushButton_fill = self.findChild(QtWidgets.QPushButton,"pushButton_fill")
+        self.pushButton_fill.clicked.connect(self.pushButton_fill_clicked)
+        
+        
+        
+        
+        for color_ind, color in enumerate(COLORS):
+            radio_button = self.findChild(QRadioButton, "radioButton_" + str(color_ind))
+            radio_button.setStyleSheet(f"color: rgb({color[0]}, {color[1]}, {color[2]});")
+            radio_button.toggled.connect(self.radio_button_color_clicked)
+            
+        radio_button = self.findChild(QRadioButton, "radioButton_" + "auto")
+        radio_button.toggled.connect(self.radio_button_color_clicked)
         self.show()
         
-    def open_advanced_settings(self):
         
+    def open_advanced_settings(self):
         self.advanced_settings_window.show()
-
-
+        
+        
+    def radio_button_color_clicked(self):
+        button = self.sender()
+        if button.isChecked():
+            button_name = button.objectName().replace('radioButton_', '').replace(' ■','')
+            self.viewer.setColorIndex(button_name)
+    
     def resizeEvent(self, event):
         self.viewer.resize(event)
         QMainWindow.resizeEvent(self, event)
+        
+    def pushButton_split_clicked(self):
+        self.viewer.setDrawLineButtons('split')
+        
+    def pushButton_join_clicked(self):
+        self.viewer.setDrawLineButtons('join')
+        
+    def pushButton_remove_clicked(self):
+        self.viewer.setDrawLineButtons('remove')
+        
+    def pushButton_new_cell_clicked(self):
+        self.viewer.setDrawLineButtons('new')
+
+        
+    def pushButton_fill_clicked(self):
+        self.viewer.setDrawLineButtons('fill')
+
+        
 
 
 if __name__ == '__main__':
