@@ -28,29 +28,40 @@ def getColors():
                         [  0, 255, 255],
                         [114,   0,  20]])
     
+    # colors = np.array([ [255,   0,   0],
+    #                     [  0, 255,   0],
+    #                     [  0,   0, 255],
+    #                     [255, 255,  0],
+    #                     [255,   0, 255],
+    #                     [255, 128,   0],
+    #                     [  0, 255, 255],
+    #                     [128,   0,  0]])
+    
     return colors
 
 
 
 def transform_colors_with_transparency_rounding(colors, transparency):
     colors_out = []
-    for color in colors:
-        # Create a QImage to draw on.
-        pixmap = QPixmap(1, 1)
-        pixmap.fill(Qt.transparent)
     
-        # Create a QPainter to perform the drawing.
-        painter = QPainter(pixmap)
+    pixmap = QPixmap(1, len(colors))
+    # pixmap = QPixmap.fromImage(QImage(1, len(colors), QImage.Format_ARGB32))
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+
     
-        # Set the color and draw a point.
-        color = QColor(*color, transparency)  
-        painter.setPen(color)
-        painter.drawPoint(0, 0)
+    for color_idx, color in enumerate(colors):
+
+        painter.setPen(QColor(*color, transparency) )
+       
+        painter.drawPoint(0, color_idx)
     
-        # Done painting.
-        painter.end()
+    
+    painter.end()
         
-        color_out = QPixmapToArray(pixmap)[0,0,:3]
+    arr = QPixmapToArray(pixmap)[:,:,:3]
+    for color_idx, color in enumerate(colors):
+        color_out = arr[color_idx, 0]
         
         colors_out.append(color_out)
 
@@ -99,84 +110,17 @@ def toBinaryLine(q_points, size):
 
 
 
-def get_unique_colors(image):
-
-    w, h, d = image.shape
-    image_array = np.reshape(image, (w * h, d))
-
-    # Get all unique colors
-    unique_colors = np.unique(image_array, axis=0)
-
-    return unique_colors
-
-# def custom_round(x):
-#     return int(x + (0.5 if x > 0 else -0.5))
-
-# v_custom_round = np.vectorize(custom_round)
-
-
-# def custom_round(value):
-#     if value < 0:
-#         return np.ceil(value - 0.5)
-#     else:
-#         return np.floor(value + 0.5)
-
-# v_custom_round = np.vectorize(custom_round)
-
-
-
 def colorToLabel(overlay_arr, transparency):
     
     colors = getColors()
-    print(colors)
     colors = transform_colors_with_transparency_rounding(colors, transparency)
     
-    
-    # print(colors)
-    # colors_adjusted = colors * (transparency / 255.0)
-    # colors_adjusted = np.round(colors_adjusted)
-    # colors_rounded = colors_adjusted * (255.0 / transparency)
-    # colors_rounded = np.clip(colors_rounded, 0, 255)
-    # colors = colors_rounded.astype(int)
-
-    
-    # u_colors = get_unique_colors(overlay_arr[:,:,:3])
-    # u_colors = np.delete(u_colors, np.where(u_colors == np.array([0, 0, 0])))
-    # for u_color in u_colors:
-    #     pass
-        
-    
-    
-    # u_vals = np.unique(overlay_arr[:,:,:2])
-    
-    # colors = np.round(np.round(colors * (transparency/255)) /  (transparency/255))
-    # colors = v_custom_round(v_custom_round(colors * (transparency/255)) /  (transparency/255))
-    # overlay_arr = overlay_arr.astype(np.int16)
-    
-    # transparency = 72 / 255.0
-
-    # colors_adjusted = np.round(colors / transparency).astype(int)
-
-    # colors_adjusted = np.clip(colors_adjusted, 0, 255
-    
-    # colors = v_custom_round(v_custom_round(colors * (transparency / 255)) / (transparency / 255))
-    
-
-    
     label_arr = np.zeros(overlay_arr.shape[:2], dtype=np.uint8)
-    print(colors)
-    print(get_unique_colors(overlay_arr[:,:,:3]))
-    print(np.unique(overlay_arr[:,:,3]))
+
     for idx_color, color in enumerate(colors):
-        # why color is not precise?
-        # label_arr[(np.abs(overlay_arr[:,:,0] - color[0]) < 5) & (np.abs(overlay_arr[:,:,1] - color[1]) < 5) & (np.abs(overlay_arr[:,:,2] - color[2]) < 5)] = idx_color + 1 
-        
+
         label_arr[(overlay_arr[:,:,0] == color[0]) & (overlay_arr[:,:,1] == color[1])  & (overlay_arr[:,:,2] == color[2])] = idx_color + 1 
-        # tolerance = 5
-        # label_arr[ np.isclose(overlay_arr[:,:,0], color[0], atol=tolerance) & \
-        #            np.isclose(overlay_arr[:,:,1], color[1], atol=tolerance) & \
-        #            np.isclose(overlay_arr[:,:,2], color[2], atol=tolerance)] = idx_color + 1 
-        
+
     return label_arr
 
 
@@ -232,30 +176,57 @@ def toUniqueLabel(label_arr):
         
         
         
-    
-    
+def get_unique_colors(image):
+
+    w, h, d = image.shape
+    image_array = np.reshape(image, (w * h, d))
+
+    # Get all unique colors
+    unique_colors = np.unique(image_array, axis=0)
+
+    return unique_colors
   
-def relabel(label_arr):
-    pass
-    
-    
-        
 
-
-    
 
 
 
 def set_pixmap_transparency(pixmap, alpha):
     
     arr = QPixmapToArray(pixmap)
-    tmp = arr[:,:,3]
-    tmp[tmp > 0] = alpha
-    arr[:,:,3] = tmp
+    
+    transparency = np.max(arr[:,:,3])
+    
+    colors = getColors()
+    print('--------')
+    print('original colors:')
+    print(colors)
+    colors = transform_colors_with_transparency_rounding(colors, transparency)
+    
+    print('transofrmed colors:')
+    print(colors)
+    
+    print('image colors:')
+    print(get_unique_colors(arr))
+    
+    
+    
+    
+    arr_copy = np.zeros_like(arr)
+    
+    for idx_color, color in enumerate(colors):
 
-    pixmap = arrayToQPixmap(arr)
+        colorx = np.append(color, alpha)
+        mask = (arr[:,:,0] == color[0]) & (arr[:,:,1] == color[1])  & (arr[:,:,2] == color[2])
+        for channel in range(4):
+            arr_copy[:, :, channel][mask] =  colorx[channel]
+ 
     
     
+    # tmp = arr[:,:,3]
+    # tmp[tmp > 0] = alpha
+    # arr[:,:,3] = tmp
+
+    pixmap = arrayToQPixmap(arr_copy)
     
 
     return pixmap
