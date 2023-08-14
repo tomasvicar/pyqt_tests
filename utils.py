@@ -6,10 +6,13 @@ from PyQt5.QtGui import qRgb
 import matplotlib.pyplot as plt
 
 from skimage.measure import label
-from skimage.morphology import disk,dilation
-from scipy.ndimage.morphology import binary_dilation
 
+from colorize_notouchingsamecolor import colorize_notouchingsamecolor
+from scipy.ndimage import generate_binary_structure, binary_dilation, grey_dilation
+from skimage.morphology import disk
+from scipy.ndimage import binary_fill_holes
 
+import time
 
 def get_pixel_color(pixmap, x, y):
     image = pixmap.toImage()
@@ -44,10 +47,10 @@ def getColors():
 def transform_colors_with_transparency_rounding(colors, transparency):
     colors_out = []
     
-    pixmap = QPixmap(1, len(colors))
-    # pixmap = QPixmap.fromImage(QImage(1, len(colors), QImage.Format_ARGB32))
-    pixmap.fill(Qt.transparent)
-    painter = QPainter(pixmap)
+    image = QImage(1, len(colors), QImage.Format_ARGB32)
+    
+    image.fill(Qt.transparent)
+    painter = QPainter(image)
 
     
     for color_idx, color in enumerate(colors):
@@ -59,7 +62,7 @@ def transform_colors_with_transparency_rounding(colors, transparency):
     
     painter.end()
         
-    arr = QPixmapToArray(pixmap)[:,:,:3]
+    arr = QImageToArray(image)[:,:,:3]
     for color_idx, color in enumerate(colors):
         color_out = arr[color_idx, 0]
         
@@ -68,10 +71,25 @@ def transform_colors_with_transparency_rounding(colors, transparency):
     return np.stack(colors_out)
 
 
-def QPixmapToArray(pixmap):
+
+    
+  
+def arrayToQImage(arr):
+    # or import qimage2ndarray
+    arr = arr[:,:,[2, 1, 0, 3]].copy()
+    
+    height, width, channels_count = arr.shape
+    image = QImage(arr.data, width, height, channels_count * width, QImage.Format_ARGB32)
+    # image = QImage(arr.data, width, height, channels_count * width, QImage.Format_ARGB32_Premultiplied)
+    # pixmap = QPixmap.fromImage(image)
+    return image
+
+
+
+def QImageToArray(image):
     # or import qimage2ndarray
     channels_count = 4
-    image = pixmap.toImage().convertToFormat(QImage.Format_ARGB32)
+    # image = image.convertToFormat(QImage.Format_ARGB32)
     # image = pixmap.toImage().convertToFormat(QImage.Format_ARGB32_Premultiplied)
     # image = pixmap.toImage()
     width = image.width()
@@ -83,19 +101,9 @@ def QPixmapToArray(pixmap):
     
     return arr
     
-  
-def arrayToQPixmap(arr):
-    # or import qimage2ndarray
-    arr = arr[:,:,[2, 1, 0, 3]].copy()
-    
-    height, width, channels_count = arr.shape
-    image = QImage(arr.data, width, height, channels_count * width, QImage.Format_ARGB32)
-    # image = QImage(arr.data, width, height, channels_count * width, QImage.Format_ARGB32_Premultiplied)
-    pixmap = QPixmap.fromImage(image)
-    return pixmap
 
 
-def toBinaryLine(q_points, size):
+def toBinaryLine(q_points, size, closed=False):
     binary_image = QImage(size, QImage.Format_ARGB32)
     binary_image.fill(Qt.transparent)  # Fill the image with transparency
 
@@ -103,6 +111,8 @@ def toBinaryLine(q_points, size):
     painter.setPen(QPen(Qt.black, 1))  # Set the pen to red color, 1 pixel width
     for i in range(len(q_points) - 1):
         painter.drawLine(q_points[i], q_points[i+1])
+    if closed:
+        painter.drawLine(q_points[i+1], q_points[0])   
     painter.end()
     
     return binary_image
@@ -113,10 +123,11 @@ def toBinaryLine(q_points, size):
 def colorToLabel(overlay_arr, transparency):
     
     colors = getColors()
+    # print(colors)
     colors = transform_colors_with_transparency_rounding(colors, transparency)
-    
+    # print(colors)
     label_arr = np.zeros(overlay_arr.shape[:2], dtype=np.uint8)
-
+    # print(get_unique_colors(overlay_arr))
     for idx_color, color in enumerate(colors):
 
         label_arr[(overlay_arr[:,:,0] == color[0]) & (overlay_arr[:,:,1] == color[1])  & (overlay_arr[:,:,2] == color[2])] = idx_color + 1 
@@ -125,13 +136,14 @@ def colorToLabel(overlay_arr, transparency):
 
 
 def labelToColor(label_arr, transparency):
-    COLORS = getColors()
+    colors = getColors()
+    colors = transform_colors_with_transparency_rounding(colors, transparency)
     
     # Create an empty array for the color image.
     color_arr = np.zeros((*label_arr.shape, 4), dtype=np.uint8)  # 3 for RGB channels
     
     # Loop over the colors and assign pixels with the current label the current color.
-    for idx_color, color in enumerate(COLORS):
+    for idx_color, color in enumerate(colors):
         color_tmp = np.concatenate((color, np.array([transparency])))
         color_arr[label_arr == idx_color + 1] = color_tmp
         
@@ -142,23 +154,136 @@ def labelToColor(label_arr, transparency):
 
 def splitCell(overlay, birnary_line):
     
-    overlay_arr = QPixmapToArray(overlay)
+    overlay_arr = QImageToArray(overlay)
     transparency = np.max(overlay_arr[:,:,3])
+    
+
     label_arr = colorToLabel(overlay_arr, transparency)
     
-    birnary_line_arr = QPixmapToArray(QPixmap.fromImage(birnary_line))[:,:,3] == 255
+    
+    
+    birnary_line_arr = QImageToArray(birnary_line)[:,:,3] == 255
+    
+    birnary_line_arr_in_cell = birnary_line_arr & (label_arr > 0)
     label_arr[birnary_line_arr] = 0
+    
+    
+    
+
+    label_arr_u = toUniqueLabel(label_arr)
+
+    
+
+    
+    label_arr_u = colorize_notouchingsamecolor(label_arr_u, alowed_num_of_colors=8, min_dist=3)
+    label_arr_u[birnary_line_arr_in_cell] = grey_dilation(label_arr_u, size=(3, 3)) [birnary_line_arr_in_cell]
+
+    
+    overlay_arr = labelToColor(label_arr_u, transparency)
+    
+
+    
+    # overlay_arr = labelToColor(label_arr, transparency)
+    
+    
+    overlay = arrayToQImage(overlay_arr)
+    
+
+    
+    return overlay
+
+
+def joinCell(overlay, birnary_line):
+    
+    overlay_arr = QImageToArray(overlay)
+    transparency = np.max(overlay_arr[:,:,3])
+    
+
+    label_arr = colorToLabel(overlay_arr, transparency)
+    
+    
+    
+    birnary_line_arr = QImageToArray(birnary_line)[:,:,3] == 255
+    
+    label_arr_u = toUniqueLabel(label_arr)
+
+
+    selected_nums = label_arr_u[birnary_line_arr]
+    selected_nums = selected_nums[selected_nums != 0]
+    
+    if len(selected_nums) > 0:
+        label_arr_u[np.isin(label_arr_u, selected_nums)] = selected_nums[0]
+
+    
+    label_arr_u = colorize_notouchingsamecolor(label_arr_u, alowed_num_of_colors=8, min_dist=3)
+
+    
+    overlay_arr = labelToColor(label_arr_u, transparency)
+    
+    
+    
+    overlay = arrayToQImage(overlay_arr)
+    
+    return overlay
+
+
+def removeCell(overlay, birnary_line):
+    
+    overlay_arr = QImageToArray(overlay)
+    transparency = np.max(overlay_arr[:,:,3])
+    
+
+    label_arr = colorToLabel(overlay_arr, transparency)
+    
+    
+    birnary_line_arr = QImageToArray(birnary_line)[:,:,3] == 255
+    
+    label_arr_u = toUniqueLabel(label_arr)
+
+    selected_nums = label_arr_u[birnary_line_arr]
+    selected_nums = selected_nums[selected_nums != 0]
+    
+    if len(selected_nums) > 0:
+        overlay_arr[np.isin(label_arr_u, selected_nums)] = 0
+
+    
+    
+    overlay = arrayToQImage(overlay_arr)
+    
+    return overlay
+
+
+def newCell(overlay, birnary_line, transparency):
+    
+    overlay_arr = QImageToArray(overlay)
+        
+    
+
+    label_arr = colorToLabel(overlay_arr, transparency)
     
     label_arr_u = toUniqueLabel(label_arr)
     
-    label_arr_u = colorize_notouchingsamecolor(label_arr_u, alowed_num_of_colors=8, min_dist=5)
+        
+    birnary_line_arr = QImageToArray(birnary_line)[:,:,3] == 255
+    birnary_line_arr_fill = binary_fill_holes(birnary_line_arr)
     
+    label_arr_u[birnary_line_arr_fill] = np.max(label_arr_u) + 1
+
+
+    label_arr_u = colorize_notouchingsamecolor(label_arr_u, alowed_num_of_colors=8, min_dist=3)
+
     overlay_arr = labelToColor(label_arr_u, transparency)
+    
+
     # overlay_arr = labelToColor(label_arr, transparency)
-    overlay = arrayToQPixmap(overlay_arr)
+    
+    
+    overlay = arrayToQImage(overlay_arr)
     
     return overlay
+
     
+
 
 def toUniqueLabel(label_arr):
     
@@ -190,121 +315,53 @@ def get_unique_colors(image):
 
 
 
-def set_pixmap_transparency(pixmap, alpha):
+def set_image_transparency(image, alpha):
     
-    arr = QPixmapToArray(pixmap)
+    arr = QImageToArray(image)
     
     transparency = np.max(arr[:,:,3])
     
     colors = getColors()
-    print('--------')
-    print('original colors:')
-    print(colors)
-    colors = transform_colors_with_transparency_rounding(colors, transparency)
+    # print('--------')
+    # print('original colors:')
+    # print(colors)
+    colors_in = transform_colors_with_transparency_rounding(colors, transparency)
+    colors_out = transform_colors_with_transparency_rounding(colors, alpha)
     
-    print('transofrmed colors:')
-    print(colors)
+    # print('transofrmed colors:')
+    # print(colors)
     
-    print('image colors:')
-    print(get_unique_colors(arr))
+    # print('image colors:')
+    # print(get_unique_colors(arr))
     
     
     
     
     arr_copy = np.zeros_like(arr)
     
-    for idx_color, color in enumerate(colors):
+    for idx_color, (color_in, color_out) in enumerate(zip(colors_in, colors_out)):
 
-        colorx = np.append(color, alpha)
-        mask = (arr[:,:,0] == color[0]) & (arr[:,:,1] == color[1])  & (arr[:,:,2] == color[2])
+        
+        mask = (arr[:,:,0] == color_in[0]) & (arr[:,:,1] == color_in[1])  & (arr[:,:,2] == color_in[2])
+        
+        colorx = np.append(color_out, alpha)
         for channel in range(4):
             arr_copy[:, :, channel][mask] =  colorx[channel]
  
+    
+    image = arrayToQImage(arr_copy)
     
     
     # tmp = arr[:,:,3]
     # tmp[tmp > 0] = alpha
     # arr[:,:,3] = tmp
 
-    pixmap = arrayToQPixmap(arr_copy)
+    # image = arrayToQImage(arr)
     
 
-    return pixmap
+    return image
 
 
 
 
 
-import numpy as np
-
-def colorize_notouchingsamecolor(L, alowed_num_of_colors=8, min_dist=5):
-    
-    N=np.max(L)
-    
-    neigbours=[]
-    for k in range(N):
-        k=k+1
-        
-        cell=L==k
-        
-        cell_dilate=binary_dilation(cell,disk(min_dist)>0)
-        
-        tmp=np.unique(L[cell_dilate])
-        tmp=tmp[(tmp!=0)&(tmp!=k)]
-        
-        neigbours.append(tmp-1)
-        
-        
-    numcolors = np.inf
-    all_is_not_done=1
-    rounds=0
-       
-    
-    maxxx=500
-    for qqq in range(maxxx):
-    
-        all_is_not_done=0
-        rounds=rounds+1
-        
-        I=np.random.permutation(N)
-        
-        
-        colors=np.zeros(N);
-        
-        numcolors=1
-        for k in I:
-            
-            idx = neigbours[k]
-            
-            neighborcolors = np.unique(colors[idx])
-            
-            # neighborcolors=neighborcolors[neighborcolors!=0]
-            
-            thiscolor = list(set(list(np.arange(alowed_num_of_colors))) - set(neighborcolors))
-             
-            if len(thiscolor) ==0 :
-                all_is_not_done=1
-                thiscolor=list(np.arange(alowed_num_of_colors))
-            
-            
-            thiscolor = thiscolor[np.random.randint(len(thiscolor))]
-            # thiscolor = thiscolor[0]
-            colors[k] = thiscolor
-            
-            
-        if ~all_is_not_done:
-            break
-        
-        
-        if qqq==(maxxx-1):
-            raise NameError('colors not found')
-            
-            
-    
-
-    color_ind_img=np.zeros(L.shape,'uint8')
-    
-    for k in range(N):
-        color_ind_img[L==k+1]=colors[k]+1
-          
-    return color_ind_img

@@ -1,16 +1,65 @@
 from PyQt5.QtWidgets import QApplication, QGraphicsView, QGraphicsScene, QMainWindow
 from PyQt5.QtWidgets import QVBoxLayout, QSizePolicy, QGraphicsPixmapItem, QSpinBox, QCheckBox
-from PyQt5.QtWidgets import  QRadioButton, QGroupBox
+from PyQt5.QtWidgets import  QRadioButton, QGroupBox, QFileDialog
 from PyQt5.QtCore import Qt, QPointF, QSize, QRectF, QLineF, QPoint, QRect
 from PyQt5.QtGui import QPixmap, QPainter, QImage, QColor, QCursor, QPen, QMouseEvent
 from PyQt5 import QtWidgets, uic
-from AdvancedSettingsWindow import AdvancedSettingsWindow
-import numpy as np
 
-from utils import set_pixmap_transparency
+from AdvancedSettingsWindow import AdvancedSettingsWindow
 import utils
 
+import numpy as np
+from skimage.io import imread
+from skimage.io import imsave
+import copy
+
 COLORS = utils.getColors()
+
+
+class History():
+    def __init__(self, viewer):
+        self.viewer = viewer
+        self.counter = 0
+        self.max_history_len = 10
+        
+    def init_history(self):
+        self.overlays_history = [self.viewer.overlay for x in range(self.max_history_len)]
+        
+    def counter_next(self):  
+        self.counter = self.counter + 1 
+        if self.counter < 0:
+            self.counter = self.max_history_len - 1
+        if self.counter > self.max_history_len - 1:
+            self.counter  = 0  
+            
+    def counter_previous(self):
+        self.counter = self.counter - 1 
+        if self.counter < 0:
+            self.counter = self.max_history_len - 1
+        if self.counter > self.max_history_len - 1:
+            self.counter  = 0  
+            
+        
+    def save_state(self):
+        self.counter_next()
+        self.overlays_history[self.counter] =self.viewer.overlay.copy()
+        
+    
+    def undo(self):
+        self.counter_previous()
+        self.viewer.setOverlay(self.overlays_history[self.counter])
+    
+    def redo(self):
+        self.counter_next()
+        self.viewer.setOverlay(self.overlays_history[self.counter])
+        
+    
+    
+
+        
+        
+    
+
 
 
 class ImageViewerDrawing(QGraphicsView):
@@ -25,6 +74,9 @@ class ImageViewerDrawing(QGraphicsView):
         self.ellipse = None
         self._drawline = False
         self._drawline_clicked = False
+        self.parent = parent
+        
+        self.overlay_original = None
         
         self.checkBox_drawing_visible = parent.findChild(QCheckBox,"checkBox_drawing_visible")
         
@@ -36,16 +88,45 @@ class ImageViewerDrawing(QGraphicsView):
         self.setRenderHint(QPainter.SmoothPixmapTransform)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         
+        self.history = History(self)
         
         self.setMouseTracking(True)
+        # self.setFocusPolicy(Qt.StrongFocus)
+        # self.setFocus()
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Space:
             self.checkBox_drawing_visible.setChecked(not self.checkBox_drawing_visible.isChecked())
+            
+        if event.key() == Qt.Key_0:
+            self.parent.radio_buttons[0].setChecked(True)
+        if event.key() == Qt.Key_1:
+            self.parent.radio_buttons[1].setChecked(True)
+        if event.key() == Qt.Key_2:
+            self.parent.radio_buttons[2].setChecked(True)
+        if event.key() == Qt.Key_3:
+            self.parent.radio_buttons[3].setChecked(True)
+        if event.key() == Qt.Key_4:
+            self.parent.radio_buttons[4].setChecked(True)
+        if event.key() == Qt.Key_5:
+            self.parent.radio_buttons[5].setChecked(True)
+        if event.key() == Qt.Key_6:
+            self.parent.radio_buttons[6].setChecked(True)
+        if event.key() == Qt.Key_7:
+            self.parent.radio_buttons[7].setChecked(True)
+        if (event.key() == Qt.Key_8) or (event.key() == Qt.Key_9) or (event.key() == Qt.Key_Period) or (event.key() == Qt.Key_Comma):
+            self.parent.radio_buttons[8].setChecked(True)
+            
 
         
     def getOverlay(self):
         return self.overlay
+    
+    
+    def setOverlay(self, overlay):
+        self.overlay = overlay
+        self.updateOverlay()
+        
     
     def setColorIndex(self, index_str):
         if index_str != 'auto':
@@ -67,12 +148,14 @@ class ImageViewerDrawing(QGraphicsView):
         
         
         # self.overlay = QPixmap.fromImage(QImage(self._pixmap.size(), QImage.Format_ARGB32))
-        self.overlay = QPixmap(self._pixmap.size())
+        # self.overlay = QPixmap(self._pixmap.size())
+        
+        self.overlay = QImage(self._pixmap.size(), QImage.Format_ARGB32)
         self.overlay.fill(Qt.transparent)
-        self._photo_overlay = self._scene.addPixmap(self.overlay)
+        self._photo_overlay = self._scene.addPixmap(QPixmap.fromImage(self.overlay))
+        self.history.init_history()
         
         
-
 
     def wheelEvent(self, event):
 
@@ -120,7 +203,7 @@ class ImageViewerDrawing(QGraphicsView):
         if isinstance(self._color_triplet, QColor):
             self._color = self._color_triplet
         else:
-            self._color = QColor(*self._color_triplet, 255 - int(self.advanced_settings_window.spinBox_transparency.value() / 100 * 255))
+            self._color = QColor(*self._color_triplet, self.getTransparency())
         
         
 
@@ -134,7 +217,8 @@ class ImageViewerDrawing(QGraphicsView):
                 self._mouse_position_old =  self.mapToScene(event.pos())
                 self._draw = True
                 if self._color_auto:
-                    self._color_triplet = utils.get_pixel_color(self.overlay, int(self._mouse_position_old.x()), int(self._mouse_position_old.y()))
+                    self._color_triplet = self.overlay.pixelColor( int(self._mouse_position_old.x()), int(self._mouse_position_old.y()))
+                    
                 self.drawLine(event)
             else:
                 self._drawline_clicked = True
@@ -164,15 +248,15 @@ class ImageViewerDrawing(QGraphicsView):
                     self.removeCell()  
                 elif self._buttonType == 'new':
                     self.newCell()  
-                elif self._buttonType == 'fill':
-                    self.fillCell()  
+            else:
+                self.history.save_state()
                         
                         
             
             
     def updateOverlay(self):
         if self.checkBox_drawing_visible.isChecked():
-            self._photo_overlay.setPixmap(self.overlay)
+            self._photo_overlay.setPixmap(QPixmap.fromImage(self.overlay))
         else:
             tmp = QPixmap(self.overlay.size())
             tmp.fill(Qt.transparent)
@@ -198,6 +282,9 @@ class ImageViewerDrawing(QGraphicsView):
             
             
     def mouseMoveEvent(self, event):
+        if self._scene is None:
+            return
+        
         if self.ellipse is not None:
             self._scene.removeItem(self.ellipse)
         
@@ -235,12 +322,17 @@ class ImageViewerDrawing(QGraphicsView):
             self.fitInView(self._scene.sceneRect(), Qt.KeepAspectRatio)
 
     def resize(self, event):
-        self.fitInView(self._scene.sceneRect(), Qt.KeepAspectRatio)
+        if self._scene is not None:
+            self.fitInView(self._scene.sceneRect(), Qt.KeepAspectRatio)
+            
+    def getTransparency(self):
+        
+        return 255 - int(self.advanced_settings_window.spinBox_transparency.value() / 100 * 255)
 
         
     def update_trasparency(self):
-        self.overlay = set_pixmap_transparency(self.overlay, 255 - int(self.advanced_settings_window.spinBox_transparency.value() / 100 * 255))
-        self._photo_overlay.setPixmap(self.overlay)
+        self.overlay = utils.set_image_transparency(self.overlay, self.getTransparency())
+        self._photo_overlay.setPixmap(QPixmap.fromImage(self.overlay))
         
     def setDrawLineButtons(self, buttonType):
         self._drawline = True
@@ -252,18 +344,26 @@ class ImageViewerDrawing(QGraphicsView):
         birnary_line = utils.toBinaryLine(self.whole_line_pos, self._pixmap.size())
         self.overlay = utils.splitCell(self.overlay, birnary_line)
         self.updateOverlay()
+        self.history.save_state()
     
     def joinCell(self):
-        pass
+        birnary_line = utils.toBinaryLine(self.whole_line_pos, self._pixmap.size())
+        self.overlay = utils.joinCell(self.overlay, birnary_line)
+        self.updateOverlay()
+        self.history.save_state()
     
     def removeCell(self):
-        pass
+        birnary_line = utils.toBinaryLine(self.whole_line_pos, self._pixmap.size())
+        self.overlay = utils.removeCell(self.overlay, birnary_line)
+        self.updateOverlay()
+        self.history.save_state()
     
     def newCell(self):
-        pass
+        birnary_line = utils.toBinaryLine(self.whole_line_pos, self._pixmap.size(), closed=True)
+        self.overlay = utils.newCell(self.overlay, birnary_line, 255 - int(self.advanced_settings_window.spinBox_transparency.value() / 100 * 255))
+        self.updateOverlay()
+        self.history.save_state()
     
-    def fillCell(self):
-        pass
 
 
 
@@ -275,7 +375,7 @@ class MainWindow(QMainWindow):
         self.advanced_settings_window = AdvancedSettingsWindow(self)
 
         self.viewer = ImageViewerDrawing(self, self.advanced_settings_window)
-        self.viewer.setImage(QPixmap('_DSC0072_3.bmp'))
+        # self.viewer.setImage(QPixmap('_DSC0072_3.bmp'))
         
         self.advanced_settings_window.setViewer(self.viewer)
 
@@ -284,6 +384,25 @@ class MainWindow(QMainWindow):
         
         self.actionAdvanced_settings = self.findChild(QtWidgets.QAction, 'actionAdvanced_settings')
         self.actionAdvanced_settings.triggered.connect(self.open_advanced_settings)
+        
+        self.actionOpen = self.findChild(QtWidgets.QAction, 'actionOpen')
+        self.actionOpen.triggered.connect(self.actionOpen_clicked)
+        
+        self.actionLoad = self.findChild(QtWidgets.QAction, 'actionLoad')
+        self.actionLoad.triggered.connect(self.actionLoad_clicked)
+        
+        self.actionSave = self.findChild(QtWidgets.QAction, 'actionSave')
+        self.actionSave.triggered.connect(self.actionSave_clicked)
+        
+        
+        self.actionUndo = self.findChild(QtWidgets.QAction, 'actionUndo_2')
+        self.actionUndo.triggered.connect(self.actionUndo_clicked)
+        
+        self.actionRedo = self.findChild(QtWidgets.QAction, 'actionRedo_2')
+        self.actionRedo.triggered.connect(self.actionRedo_clicked)
+        
+        self.actionReset = self.findChild(QtWidgets.QAction, 'actionReset_2')
+        self.actionReset.triggered.connect(self.actionReset_clicked)
         
         
         self.checkBox_drawing_visible = self.findChild(QCheckBox,"checkBox_drawing_visible")
@@ -305,20 +424,23 @@ class MainWindow(QMainWindow):
         self.pushButton_new_cell = self.findChild(QtWidgets.QPushButton,"pushButton_new_cell")
         self.pushButton_new_cell.clicked.connect(self.pushButton_new_cell_clicked)
         
-        self.pushButton_fill = self.findChild(QtWidgets.QPushButton,"pushButton_fill")
-        self.pushButton_fill.clicked.connect(self.pushButton_fill_clicked)
+
         
         
         
-        
+        self.radio_buttons = []
         for color_ind, color in enumerate(COLORS):
             radio_button = self.findChild(QRadioButton, "radioButton_" + str(color_ind))
             radio_button.setStyleSheet(f"color: rgb({color[0]}, {color[1]}, {color[2]});")
             radio_button.toggled.connect(self.radio_button_color_clicked)
+            self.radio_buttons.append(radio_button)
             
         radio_button = self.findChild(QRadioButton, "radioButton_" + "auto")
         radio_button.toggled.connect(self.radio_button_color_clicked)
+        self.radio_buttons.append(radio_button)
         self.show()
+        self.viewer.setFocusPolicy(Qt.StrongFocus)
+        self.viewer.setFocus()
         
         
     def open_advanced_settings(self):
@@ -347,9 +469,62 @@ class MainWindow(QMainWindow):
     def pushButton_new_cell_clicked(self):
         self.viewer.setDrawLineButtons('new')
 
+    def actionOpen_clicked(self):
+        # Open a QFileDialog in 'Open File' mode.
+        options = QFileDialog.Options()
+        options |= QFileDialog.ReadOnly
+        fileName, _ = QFileDialog.getOpenFileName(self, "Open Image", "", "Image Files (*.png *.jpg *.jpeg *.bmp);;All Files (*)", options=options)
+        if fileName:
+            # Set the selected image on the viewer.
+            self.viewer.setImage(QPixmap(fileName))
+    
+    def actionLoad_clicked(self):
+
+        options = QFileDialog.Options()
+        options |= QFileDialog.ReadOnly
+        fileName, _ = QFileDialog.getOpenFileName(self, "Open Mask", "", "Image Files (*.png);;All Files (*)", options=options)
         
-    def pushButton_fill_clicked(self):
-        self.viewer.setDrawLineButtons('fill')
+        if fileName:
+            label_arr = imread(fileName)
+            # label_arr_u = utils.colorize_notouchingsamecolor(label_arr_u, alowed_num_of_colors=8, min_dist=3)
+            overlay_arr = utils.labelToColor(label_arr, self.viewer.getTransparency())
+            overlay = utils.arrayToQImage(overlay_arr)
+            self.viewer.setOverlay(overlay)
+            self.viewer.overlay_original = overlay.copy()
+        
+        
+    
+    def actionSave_clicked(self):
+        options = QFileDialog.Options()
+        options |= QFileDialog.DontUseNativeDialog
+        fileName, _ = QFileDialog.getSaveFileName(self, "Save As...", "", "Image Files (*.png)", options=options)
+        if fileName:
+            overlay = self.viewer.getOverlay()
+            overlay_arr = utils.QImageToArray(overlay)
+            label_arr = utils.colorToLabel(overlay_arr, self.viewer.getTransparency())
+            # label_arr_u = utils.toUniqueLabel(label_arr)
+            imsave(fileName, label_arr)
+        
+    
+    def actionUndo_clicked(self):
+        self.viewer.history.undo()
+       
+    
+    def actionRedo_clicked(self):
+        self.viewer.history.redo()
+    
+    
+    
+    def actionReset_clicked(self):
+        if self.viewer.overlay_original != None:
+            self.viewer.setOverlay(self.viewer.overlay_original)
+        else:
+            self.overlay.fill(Qt.transparent)
+    
+    
+
+
+        
 
         
 

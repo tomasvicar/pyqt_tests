@@ -164,13 +164,6 @@
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="pushButton_fill">
-        <property name="text">
-         <string>fill</string>
-        </property>
-       </widget>
-      </item>
-      <item>
        <spacer name="horizontalSpacer">
         <property name="orientation">
          <enum>Qt::Horizontal</enum>
@@ -210,6 +203,7 @@
     </property>
     <addaction name="actionUndo_2"/>
     <addaction name="actionRedo_2"/>
+    <addaction name="separator"/>
     <addaction name="actionReset_2"/>
    </widget>
    <widget class="QMenu" name="menuSettings">
